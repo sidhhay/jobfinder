@@ -32,6 +32,7 @@ public class VerificationService {
     private final SecureRandom random = new SecureRandom();
     private final ConcurrentMap<String, Long> resendAfter = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Integer> attempts = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Long> attemptExpiry = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Long> consumedTokens = new ConcurrentHashMap<>();
 
     public VerificationService(AppSettings settings, EmailService emails) {
@@ -43,6 +44,15 @@ public class VerificationService {
     public VerificationChallenge sendChallenge(String email, String fullName, String message) {
         String normalizedEmail = email.toLowerCase(java.util.Locale.ROOT);
         long now = Instant.now().getEpochSecond();
+        resendAfter.entrySet().removeIf(entry -> entry.getValue() < now);
+        consumedTokens.entrySet().removeIf(entry -> entry.getValue() < now);
+        attemptExpiry.entrySet().removeIf(entry -> {
+            if (entry.getValue() < now) {
+                attempts.remove(entry.getKey());
+                return true;
+            }
+            return false;
+        });
         Long nextAllowed = resendAfter.get(normalizedEmail);
         if (nextAllowed != null && nextAllowed > now) {
             throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "Please wait before requesting another verification code");
@@ -61,6 +71,7 @@ public class VerificationService {
         claims.put("exp", Instant.now().getEpochSecond() + settings.emailCodeMinutes() * 60L);
         String token = Jwt.encode(claims, settings.jwtSecretKey(), settings.jwtAlgorithm(), null);
         attempts.put(salt, 0);
+        attemptExpiry.put(salt, Instant.now().getEpochSecond() + settings.emailCodeMinutes() * 60L);
 
         emails.sendVerificationEmail(email, fullName, code);
         boolean exposeCode = settings.authDebugReturnCodes() || settings.smtpHost() == null;
@@ -87,6 +98,7 @@ public class VerificationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Invalid verification code");
         }
         attempts.remove(salt);
+        attemptExpiry.remove(salt);
         consumedTokens.put(token, Instant.now().getEpochSecond() + settings.emailCodeMinutes() * 60L);
     }
 
