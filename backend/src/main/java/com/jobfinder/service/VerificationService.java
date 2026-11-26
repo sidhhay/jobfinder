@@ -74,7 +74,8 @@ public class VerificationService {
         attemptExpiry.put(salt, Instant.now().getEpochSecond() + settings.emailCodeMinutes() * 60L);
 
         emails.sendVerificationEmail(email, fullName, code);
-        boolean exposeCode = settings.authDebugReturnCodes() || settings.smtpHost() == null;
+        // Never return a verification code merely because SMTP is missing; debug exposure must be explicit.
+        boolean exposeCode = settings.authDebugReturnCodes() && settings.smtpHost() == null;
         return new VerificationChallenge(true, email, message, token,
                 settings.emailResendCooldownSeconds(), exposeCode ? code : null);
     }
