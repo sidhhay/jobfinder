@@ -34,7 +34,12 @@ public class SqlLogFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         if (!settings.sqlLogEnabled()) {
-            chain.doFilter(request, response);
+            SqlLog.reset();
+            try {
+                chain.doFilter(request, response);
+            } finally {
+                SqlLog.reset();
+            }
             return;
         }
         SqlLog.reset();
