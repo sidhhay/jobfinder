@@ -179,8 +179,8 @@ public class JobFilterService {
                         "description", Values.str(row.get("description"))))
                 .toList();
 
-        // 0 means "less than one year"; only a missing value counts as unknown.
-        int years = user.get("experience_years") instanceof Number value && value.intValue() != 0
+        // -1 means no recorded experience; 0 is a valid "<1 year" value.
+        int years = user.get("experience_years") instanceof Number value
                 ? value.intValue() : -1;
 
         Map<String, Object> profile = new LinkedHashMap<>();
