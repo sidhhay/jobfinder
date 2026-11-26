@@ -20,6 +20,13 @@ class ScreeningRulesTest {
     }
 
     @Test
+    void preservesZeroYearsAsKnownExperience() {
+        assertEquals(0, JobFilterService.experienceYearsOrUnknown(0));
+        assertEquals(2, JobFilterService.experienceYearsOrUnknown(2));
+        assertEquals(-1, JobFilterService.experienceYearsOrUnknown(null));
+    }
+
+    @Test
     void measuresSkillOverlap() {
         assertEquals(0.5, JobFilterService.skillOverlap("java developer", List.of("java", "react")));
         assertEquals(0.0, JobFilterService.skillOverlap("java developer", List.of()));
