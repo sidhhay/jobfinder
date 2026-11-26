@@ -154,6 +154,7 @@ public class AppSettings {
     public int emailCodeMinutes() { return getInt("EMAIL_VERIFICATION_CODE_MINUTES", 10); }
     public int emailResendCooldownSeconds() { return getInt("EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS", 60); }
     public boolean authDebugReturnCodes() { return getBool("AUTH_DEBUG_RETURN_CODES", false); }
+    public boolean sqlLogEnabled() { return getBool("SQL_LOG_ENABLED", false); }
     public boolean devAutoLogin() { return getBool("DEV_AUTO_LOGIN", false); }
 
     // ── Google SSO ──────────────────────────────────────────────────────────
