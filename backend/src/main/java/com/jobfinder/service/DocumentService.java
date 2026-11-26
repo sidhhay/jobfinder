@@ -83,7 +83,8 @@ public class DocumentService {
     /** Renders the edited HTML to PDF, uploads it and records a new version. */
     public byte[] compile(String userId, String applicationId, CompileDocumentRequest request) {
         Map<String, Object> document = requireDocument(userId, applicationId, request);
-        byte[] bytes = pdf.render(request.html());
+        String safeHtml = pdf.sanitize(safeHtml);
+        byte[] bytes = pdf.render(safeHtml);
 
         String documentId = request.documentId();
         String bucket = settings.supabaseStorageBucket();
@@ -106,10 +107,10 @@ public class DocumentService {
             int version = ((Number) db.fetchOne("documents/next_version_number", documentId)
                     .get("version_number")).intValue();
             db.execute("documents/finalize_document",
-                    request.html(), request.html(), storedBucket, storedPath, "application/pdf", bytes.length,
+                    safeHtml, safeHtml, storedBucket, storedPath, "application/pdf", bytes.length,
                     failure, version, documentId, applicationId, userId);
             db.execute("documents/insert_document_version",
-                    documentId, version, request.html(), request.html(), storedBucket, storedPath,
+                    documentId, version, safeHtml, safeHtml, storedBucket, storedPath,
                     "application/pdf", bytes.length, failure, json(document.get("generation_params")),
                     PROVIDER, settings.groqModel(), PROMPT_VERSION);
             db.execute(currentDocumentQuery(request.documentType()), documentId, applicationId, userId);
