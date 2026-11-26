@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ profile.full_name }} - CV</title>
+  <style>
+    @page { size: Letter; margin: 0.5in; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      color: #000;
+      font-family: "Times New Roman", Times, serif;
+      font-size: 11pt;
+      line-height: 1.22;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    a { color: #000; text-decoration: underline; }
+    .header {
+      margin: 0 0 6pt;
+      text-align: center;
+    }
+    .name {
+      font-size: 24pt;
+      font-variant: small-caps;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 6pt;
+    }
+    .contact {
+      font-size: 9.5pt;
+      line-height: 1.2;
+    }
+    .section {
+      margin-top: 8pt;
+    }
+    .section-title {
+      border-bottom: 1px solid #000;
+      font-size: 13pt;
+      font-variant: small-caps;
+      line-height: 1;
+      margin-bottom: 5pt;
+      padding-bottom: 1pt;
+    }
+    .list {
+      list-style: none;
+      margin: 0 0 0 0.15in;
+      padding: 0;
+    }
+    .entry {
+      margin: 0 0 2pt;
+    }
+    .entry-row {
+      align-items: baseline;
+      display: flex;
+      gap: 12pt;
+      justify-content: space-between;
+      width: 100%;
+    }
+    .entry-title {
+      font-weight: 700;
+    }
+    .entry-meta {
+      flex-shrink: 0;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .entry-subrow {
+      align-items: baseline;
+      display: flex;
+      font-size: 10pt;
+      font-style: italic;
+      gap: 12pt;
+      justify-content: space-between;
+      margin-top: 1pt;
+      width: 100%;
+    }
+    .role-strong {
+      font-style: normal;
+      font-weight: 700;
+    }
+    .project-stack {
+      display: block;
+      font-size: 10pt;
+      font-style: italic;
+      margin-top: 1pt;
+    }
+    .project-links {
+      flex-shrink: 0;
+      font-size: 10pt;
+      font-weight: 400;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .bullets {
+      margin: 2pt 0 0 0;
+      padding-left: 0.18in;
+    }
+    .bullets li {
+      font-size: 10pt;
+      margin: 0 0 1pt;
+      padding-left: 0;
+    }
+    .skills {
+      margin: 0;
+      padding-left: 0.18in;
+    }
+    .skills li {
+      font-size: 10pt;
+      margin: 0 0 1pt;
+    }
+    .skills-label {
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="name">{{ profile.full_name }}</div>
+    <div class="contact">
+      {% if profile.phone is not empty %}<a href="tel:{{ profile.phone }}">{{ profile.phone }}</a> | {% endif %}
+      <a href="mailto:{{ profile.email }}">{{ profile.email }}</a>
+      {% if profile.linkedin is not empty %} | <a href="{{ profile.linkedin }}">{{ profile.linkedin }}</a>{% endif %}
+      {% if profile.github is not empty %} | <a href="{{ profile.github }}">{{ profile.github }}</a>{% endif %}
+    </div>
+  </header>
+
+  {% if education is not empty %}
+  <section class="section">
+    <div class="section-title">Education</div>
+    <ul class="list">
+      {% for item in education %}
+      <li class="entry">
+        <div class="entry-row">
+          <span class="entry-title">{{ item.institution }}</span>
+          <span class="entry-meta">{{ item.location | default("") }}</span>
+        </div>
+        <div class="entry-subrow">
+          <span>{{ item.degree }}{% if item.field_of_study is not empty %} in {{ item.field_of_study }}{% endif %}{% if item.grade is not empty %}, <strong>{{ item.grade }}</strong>{% endif %}</span>
+          <span class="entry-meta">{{ item.date_range }}</span>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if experiences is not empty %}
+  <section class="section">
+    <div class="section-title">Experience</div>
+    <ul class="list">
+      {% for item in experiences %}
+      <li class="entry">
+        <div class="entry-row">
+          <span class="entry-title">{{ item.company }}</span>
+          <span class="entry-meta">{{ item.location | default("") }}</span>
+        </div>
+        <div class="entry-subrow">
+          <span class="role-strong">{{ item.role }}</span>
+          <span class="entry-meta">{{ item.date_range }}</span>
+        </div>
+        {% if item.bullet is not empty %}
+        <ul class="bullets">
+          <li>{{ item.bullet }}</li>
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if projects is not empty %}
+  <section class="section">
+    <div class="section-title">Projects</div>
+    <ul class="list">
+      {% for item in projects %}
+      
+      <li class="entry">
+        <div class="entry-row">
+          <span class="entry-title">{{ item.name }}</span>
+          <span class="project-links">
+            {% if item.github_url is not empty %}<a href="{{ item.github_url }}">GitHub</a>{% endif %}
+            {% if item.github_url is not empty and item.demo_url is not empty %} | {% endif %}
+            {% if item.demo_url is not empty %}<a href="{{ item.demo_url }}">Hosted Here</a>{% else %}Not Hosted{% endif %}
+          </span>
+        </div>
+        {% if item.keywords is not empty %}
+        <span class="project-stack">{{ item.keywords | join(", ") }}</span>
+        {% elseif item.tag is not empty %}
+        <span class="project-stack">{{ item.tag }}</span>
+        {% endif %}
+        {% if item.bullets is not empty %}
+        <ul class="bullets">
+          {% for bullet in item.bullets %}
+          <li>{{ bullet }}</li>
+          {% endfor %}
+        </ul>
+        {% elseif item.description is not empty %}
+        <ul class="bullets">
+          <li>{{ item.description }}</li>
+        </ul>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if skills is not empty %}
+  <section class="section">
+    <div class="section-title">{{ skills_heading }}</div>
+    <ul class="skills">
+      {% for group in skills %}
+      <li><span class="skills-label">{{ group.key }}:</span> {{ group.value | join(", ") }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</body>
+</html>
