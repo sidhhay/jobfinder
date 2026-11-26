@@ -17,6 +17,8 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * Stateless email verification. The salted hash of the six digit code travels inside a signed
@@ -28,6 +30,9 @@ public class VerificationService {
     private final AppSettings settings;
     private final EmailService emails;
     private final SecureRandom random = new SecureRandom();
+    private final ConcurrentMap<String, Long> resendAfter = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Integer> attempts = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Long> consumedTokens = new ConcurrentHashMap<>();
 
     public VerificationService(AppSettings settings, EmailService emails) {
         this.settings = settings;
@@ -36,6 +41,13 @@ public class VerificationService {
 
     /** Emails a new code and returns the challenge the client must answer. */
     public VerificationChallenge sendChallenge(String email, String fullName, String message) {
+        String normalizedEmail = email.toLowerCase(java.util.Locale.ROOT);
+        long now = Instant.now().getEpochSecond();
+        Long nextAllowed = resendAfter.get(normalizedEmail);
+        if (nextAllowed != null && nextAllowed > now) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "Please wait before requesting another verification code");
+        }
+        resendAfter.put(normalizedEmail, now + settings.emailResendCooldownSeconds());
         String code = String.format("%06d", random.nextInt(1_000_000));
         byte[] saltBytes = new byte[16];
         random.nextBytes(saltBytes);
@@ -48,6 +60,7 @@ public class VerificationService {
         claims.put("salt", salt);
         claims.put("exp", Instant.now().getEpochSecond() + settings.emailCodeMinutes() * 60L);
         String token = Jwt.encode(claims, settings.jwtSecretKey(), settings.jwtAlgorithm(), null);
+        attempts.put(salt, 0);
 
         emails.sendVerificationEmail(email, fullName, code);
         boolean exposeCode = settings.authDebugReturnCodes() || settings.smtpHost() == null;
@@ -65,9 +78,16 @@ public class VerificationService {
         byte[] expected = String.valueOf(claims.getOrDefault("code_hash", "")).getBytes(StandardCharsets.UTF_8);
         byte[] candidate = hash(code, String.valueOf(claims.getOrDefault("salt", "")))
                 .getBytes(StandardCharsets.UTF_8);
+        String salt = String.valueOf(claims.getOrDefault("salt", ""));
+        int used = attempts.merge(salt, 1, Integer::sum);
+        if (used > 5) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "Too many verification attempts. Request a new code.");
+        }
         if (!MessageDigest.isEqual(expected, candidate)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Invalid verification code");
         }
+        attempts.remove(salt);
+        consumedTokens.put(token, Instant.now().getEpochSecond() + settings.emailCodeMinutes() * 60L);
     }
 
     private Map<String, Object> claimsFor(String email, String token, boolean checkExpiry, String failure) {
@@ -78,7 +98,8 @@ public class VerificationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, failure, error);
         }
         if (!"email_verification".equals(claims.get("type"))
-                || !String.valueOf(claims.getOrDefault("email", "")).equalsIgnoreCase(email)) {
+                || !String.valueOf(claims.getOrDefault("email", "")).equalsIgnoreCase(email)
+                || consumedTokens.containsKey(token)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, failure);
         }
         return claims;
