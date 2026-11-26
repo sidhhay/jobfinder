@@ -361,6 +361,8 @@ function ApplicationContent() {
                 <iframe
                   title="document-preview"
                   className="h-full min-h-[24rem] w-full bg-white"
+                  sandbox=""
+                  referrerPolicy="no-referrer"
                   srcDoc={editorHtml}
                 />
               </div>

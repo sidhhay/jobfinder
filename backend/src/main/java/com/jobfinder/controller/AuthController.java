@@ -11,6 +11,7 @@ import com.jobfinder.dto.AuthDtos.SessionResponse;
 import com.jobfinder.dto.AuthDtos.UserResponse;
 import com.jobfinder.dto.AuthDtos.VerifyEmailRequest;
 import com.jobfinder.security.CurrentUser;
+import com.jobfinder.security.RateLimit;
 import com.jobfinder.service.AuthService;
 import com.jobfinder.service.GoogleOAuthService;
 import com.jobfinder.service.UserAccountService;
@@ -18,6 +19,7 @@ import com.jobfinder.web.ApiException;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +28,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 
 /** Authentication routes. */
@@ -46,11 +51,13 @@ public class AuthController {
         this.settings = settings;
     }
 
+    @RateLimit(perMinute = 3)
     @PostMapping("/register")
     public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
         return auth.register(request);
     }
 
+    @RateLimit(perMinute = 5)
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return auth.login(request);
@@ -61,11 +68,13 @@ public class AuthController {
         return auth.refresh(request.refreshToken());
     }
 
+    @RateLimit(perMinute = 5)
     @PostMapping("/verify-email")
     public AuthResponse verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
         return auth.verifyEmail(request);
     }
 
+    @RateLimit(perMinute = 2)
     @PostMapping("/resend-verification")
     public AuthResponse resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
         return auth.resendVerification(request);
@@ -96,17 +105,41 @@ public class AuthController {
         return new SessionResponse(UserResponse.from(user), new AuthTokens("dev-token", "dev-token"));
     }
 
+    @RateLimit(perMinute = 10)
     @GetMapping("/google/start")
     public ResponseEntity<Void> googleStart() {
-        return redirect(google.startUrl());
+        URI target = google.startUrl();
+        String state = java.util.Arrays.stream(target.getRawQuery().split("&"))
+                .filter(part -> part.startsWith("state="))
+                .map(part -> URLDecoder.decode(part.substring("state=".length()), StandardCharsets.UTF_8))
+                .findFirst().orElseThrow(() -> new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "OAuth state missing"));
+        var cookie = org.springframework.http.ResponseCookie.from("jobfinder_oauth_state", state)
+                .httpOnly(true)
+                .secure(settings.googleRedirectUri().startsWith("https://"))
+                .sameSite("Lax")
+                .path("/api/auth/google")
+                .maxAge(Duration.ofMinutes(10))
+                .build();
+        return ResponseEntity.status(HttpStatus.FOUND).location(target).header("Set-Cookie", cookie.toString()).build();
     }
 
+    @RateLimit(perMinute = 10)
     @GetMapping("/google/callback")
     public ResponseEntity<Void> googleCallback(
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String state,
-            @RequestParam(required = false) String error) {
-        return redirect(google.callback(code, state, error));
+            @RequestParam(required = false) String error,
+            @CookieValue(name = "jobfinder_oauth_state", required = false) String browserState) {
+        if (state == null || browserState == null
+                || !java.security.MessageDigest.isEqual(state.getBytes(StandardCharsets.UTF_8),
+                        browserState.getBytes(StandardCharsets.UTF_8))) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "OAuth state does not match this browser session");
+        }
+        var clearCookie = org.springframework.http.ResponseCookie.from("jobfinder_oauth_state", "")
+                .httpOnly(true).secure(settings.googleRedirectUri().startsWith("https://"))
+                .sameSite("Lax").path("/api/auth/google").maxAge(Duration.ZERO).build();
+        return ResponseEntity.status(HttpStatus.FOUND).location(google.callback(code, state, error))
+                .header("Set-Cookie", clearCookie.toString()).build();
     }
 
     private static ResponseEntity<Void> redirect(URI target) {

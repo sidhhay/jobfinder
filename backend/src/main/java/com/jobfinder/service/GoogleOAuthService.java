@@ -25,6 +25,8 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /** Google single sign-on (authorization code flow). Disabled unless client credentials are set. */
 @Service
@@ -41,6 +43,7 @@ public class GoogleOAuthService {
     private final PasswordHasher passwords;
     private final SessionService sessions;
     private final SecureRandom random = new SecureRandom();
+    private final ConcurrentMap<String, Long> issuedStates = new ConcurrentHashMap<>();
 
     public GoogleOAuthService(AppSettings settings, Http http, ObjectMapper mapper, Database db,
                               PasswordHasher passwords, SessionService sessions) {
@@ -58,7 +61,10 @@ public class GoogleOAuthService {
         long now = Instant.now().getEpochSecond();
         Map<String, Object> claims = new LinkedHashMap<>();
         claims.put("type", "google_oauth_state");
-        claims.put("nonce", randomText(24));
+        String nonce = randomText(24);
+        claims.put("nonce", nonce);
+        issuedStates.put(nonce, now + 600);
+        issuedStates.entrySet().removeIf(entry -> entry.getValue() < now);
         claims.put("iat", now);
         claims.put("exp", now + 600);
 
@@ -110,7 +116,8 @@ public class GoogleOAuthService {
             Map<String, Object> query = new LinkedHashMap<>();
             query.put("access_token", tokens.accessToken());
             query.put("refresh_token", tokens.refreshToken());
-            return URI.create(loginPage() + "?" + Http.query(query));
+            // Put credentials in the URL fragment: fragments are not sent in HTTP requests or referrer headers.
+            return URI.create(loginPage() + "#" + Http.query(query));
         } catch (ApiException problem) {
             return failure(problem.getMessage());
         }
@@ -144,8 +151,12 @@ public class GoogleOAuthService {
         try {
             Map<String, Object> claims =
                     Jwt.decode(state, settings.jwtSecretKey(), settings.jwtAlgorithm(), true);
-            if (!"google_oauth_state".equals(claims.get("type"))) {
+            if (!"google_oauth_state".equals(claims.get("type")) || !(claims.get("nonce") instanceof String nonce)) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "Invalid OAuth state");
+            }
+            Long expiresAt = issuedStates.remove(nonce);
+            if (expiresAt == null || expiresAt < Instant.now().getEpochSecond()) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "OAuth state is invalid or already used");
             }
         } catch (InvalidTokenException error) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "Invalid OAuth state", error);

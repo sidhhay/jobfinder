@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.json.JsonWriteFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.jobfinder.db.SqlLog;
+import com.jobfinder.config.AppSettings;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,6 +19,12 @@ import java.io.IOException;
 @Component
 public class SqlLogFilter extends OncePerRequestFilter {
 
+    private final AppSettings settings;
+
+    public SqlLogFilter(AppSettings settings) {
+        this.settings = settings;
+    }
+
     private final ObjectMapper asciiMapper =
             JsonMapper.builder().enable(JsonWriteFeature.ESCAPE_NON_ASCII).build();
 
@@ -26,6 +33,15 @@ public class SqlLogFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+        if (!settings.sqlLogEnabled()) {
+            SqlLog.reset();
+            try {
+                chain.doFilter(request, response);
+            } finally {
+                SqlLog.reset();
+            }
+            return;
+        }
         SqlLog.reset();
         ContentCachingResponseWrapper wrapper = new ContentCachingResponseWrapper(response);
         try {

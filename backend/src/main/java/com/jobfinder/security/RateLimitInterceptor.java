@@ -10,6 +10,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Fixed-window, in-memory rate limiter for methods annotated with {@link RateLimit}. */
 @Component
@@ -19,6 +20,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     }
 
     private final Map<String, Window> windows = new ConcurrentHashMap<>();
+    private final AtomicInteger cleanupCounter = new AtomicInteger();
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
@@ -31,6 +33,9 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             return true;
         }
         long minute = System.currentTimeMillis() / 60_000;
+        if (cleanupCounter.incrementAndGet() % 256 == 0) {
+            windows.entrySet().removeIf(entry -> entry.getValue().minute() < minute - 1);
+        }
         String key = request.getRemoteAddr() + "|" + method.getMethod();
         Window window = windows.merge(key, new Window(minute, 1),
                 (old, fresh) -> old.minute() == minute ? new Window(minute, old.count() + 1) : fresh);

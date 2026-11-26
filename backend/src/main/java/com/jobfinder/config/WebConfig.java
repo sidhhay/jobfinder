@@ -44,7 +44,6 @@ public class WebConfig implements WebMvcConfigurer {
         cors.setAllowCredentials(true);
         cors.addAllowedMethod(CorsConfiguration.ALL);
         cors.addAllowedHeader(CorsConfiguration.ALL);
-        cors.addExposedHeader("X-SQL-Log");
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cors);
         FilterRegistrationBean<CorsFilter> registration = new FilterRegistrationBean<>(new CorsFilter(source));

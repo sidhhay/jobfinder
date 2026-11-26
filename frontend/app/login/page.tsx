@@ -18,10 +18,15 @@ function LoginPageContent() {
 
   useEffect(() => {
     async function hydrateSessionFromGoogleCallback() {
-      const params = new URLSearchParams(window.location.search);
+      const params = new URLSearchParams(window.location.hash.startsWith("#")
+        ? window.location.hash.slice(1)
+        : window.location.search);
       const accessToken = params.get("access_token");
       const refreshToken = params.get("refresh_token");
       const callbackError = params.get("error");
+      if (window.location.hash) {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
       if (callbackError) {
         setError(callbackError);
         return;

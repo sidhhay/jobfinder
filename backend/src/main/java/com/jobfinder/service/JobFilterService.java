@@ -179,9 +179,8 @@ public class JobFilterService {
                         "description", Values.str(row.get("description"))))
                 .toList();
 
-        // 0 means "less than one year"; only a missing value counts as unknown.
-        int years = user.get("experience_years") instanceof Number value && value.intValue() != 0
-                ? value.intValue() : -1;
+        // -1 means no recorded experience; 0 is a valid "<1 year" value.
+        int years = experienceYearsOrUnknown(user.get("experience_years"));
 
         Map<String, Object> profile = new LinkedHashMap<>();
         profile.put("job_title", Values.str(user.get("raw_job_title")));
@@ -222,6 +221,10 @@ public class JobFilterService {
             return new Screening(Decision.ACCEPT, Math.round(overlap * 100) + "% skill overlap");
         }
         return new Screening(Decision.INCONCLUSIVE, INCONCLUSIVE_REASON);
+    }
+
+    static int experienceYearsOrUnknown(Object value) {
+        return value instanceof Number number ? number.intValue() : -1;
     }
 
     static Integer minimumYears(String text) {

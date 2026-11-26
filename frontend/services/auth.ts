@@ -131,17 +131,39 @@ function buildRequestHeaders(initHeaders: HeadersInit | undefined, includeJsonCo
   return headers;
 }
 
+let refreshInFlight: Promise<AuthSession | null> | null = null;
+
+function refreshStoredSession(stored: AuthSession): Promise<AuthSession | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: stored.refresh_token }),
+      });
+      if (!refreshResponse.ok) {
+        if (getStoredSession()?.refresh_token === stored.refresh_token) storeSession(null);
+        return null;
+      }
+      const refreshData = await refreshResponse.json();
+      const nextSession = normalizeSession(refreshData as BackendAuthResponse);
+      storeSession(nextSession);
+      return nextSession;
+    } catch {
+      return null;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
 async function fetchWithRefresh(path: string, init: RequestInit, includeJsonContentType = true, allowRefresh = true): Promise<Response> {
   const makeRequest = async (authorizationOverride?: string) => {
     const headers = buildRequestHeaders(init.headers, includeJsonContentType);
-    if (authorizationOverride) {
-      headers.set("Authorization", authorizationOverride);
-    }
-
-    return fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers,
-    });
+    if (authorizationOverride) headers.set("Authorization", authorizationOverride);
+    return fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   };
 
   let response: Response;
@@ -150,46 +172,23 @@ async function fetchWithRefresh(path: string, init: RequestInit, includeJsonCont
   } catch {
     throw new Error(`Could not reach backend at ${API_BASE_URL}`);
   }
+  if (response.status !== 401 || !allowRefresh || path === "/auth/refresh") return response;
 
-  const sqlLog = response.headers.get("X-SQL-Log");
-  if (sqlLog) {
+  const stored = getStoredSession();
+  if (!stored?.refresh_token) return response;
+
+  // Another request may already have rotated the token while this request was in flight.
+  const originalAuthorization = buildRequestHeaders(init.headers, includeJsonContentType).get("Authorization");
+  if (originalAuthorization && originalAuthorization !== `Bearer ${stored.access_token}`) {
     try {
-      const queries: string[] = JSON.parse(sqlLog);
-      const method = (init.method ?? "GET").toUpperCase();
-      console.groupCollapsed(`%c SQL %c ${method} ${path} %c ${queries.length} queries`, "background:#4f46e5;color:#fff;padding:1px 6px;border-radius:3px 0 0 3px;font-weight:bold", "background:#1e1b4b;color:#fff;padding:1px 8px", "color:#888;font-style:italic");
-      queries.forEach((q, i) => console.log(`%c ${i + 1} %c ${q}`, "background:#6366f1;color:#fff;padding:1px 5px;border-radius:3px;font-size:11px", "color:#c7d2fe"));
-      console.groupEnd();
+      return await makeRequest(`Bearer ${stored.access_token}`);
     } catch {
-      console.log("[SQL]", sqlLog);
+      throw new Error(`Could not reach backend at ${API_BASE_URL}`);
     }
   }
 
-  if (response.status !== 401 || !allowRefresh || path === "/auth/refresh") {
-    return response;
-  }
-
-  const stored = getStoredSession();
-  if (!stored?.refresh_token) {
-    return response;
-  }
-
-  const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: stored.refresh_token }),
-  }).catch(() => null);
-
-  if (!refreshResponse?.ok) {
-    storeSession(null);
-    dispatchSessionUpdated();
-    return response;
-  }
-
-  const refreshData = await refreshResponse.json().catch(() => null);
-  const nextSession = normalizeSession(refreshData as BackendAuthResponse);
-  storeSession(nextSession);
-  dispatchSessionUpdated();
-
+  const nextSession = await refreshStoredSession(stored);
+  if (!nextSession) return response;
   try {
     return await makeRequest(`Bearer ${nextSession.access_token}`);
   } catch {

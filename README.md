@@ -48,7 +48,7 @@ this folder.**
 | `JWT_SECRET_KEY` | login |
 | `GROQ_API_KEY` | CV parsing, AI job screening, document writing |
 | `RAPIDAPI_KEY`, `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | job search |
-| `SMTP_*` | verification emails (without it the code is returned to the browser) |
+| `SMTP_*` | verification emails (required outside local development) |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | storing generated PDFs (download works without it) |
 | `DEV_AUTO_LOGIN=true` + `NEXT_PUBLIC_DEV_AUTO_LOGIN=true` | skip login during local development |
 
@@ -103,4 +103,7 @@ mvn -q compile exec:java "-Dexec.mainClass=com.jobfinder.ats.AtsScanner" "-Dexec
 
 - The backend listens on `127.0.0.1` only (override with `HOST`).
 - `DEV_AUTO_LOGIN` disables authentication; keep it off outside local development.
-- Every response carries an `X-SQL-Log` header for debugging; remove `SqlLogFilter` before deployment.
+- SQL query logging is disabled by default. Set `SQL_LOG_ENABLED=true` only for controlled local debugging; never expose SQL logs in production.
+- Verification codes are never returned just because SMTP is missing. Configure SMTP for email verification; code exposure requires the explicit `AUTH_DEBUG_RETURN_CODES=true` development setting and must remain disabled in production.
+- Authentication rate limits, verification cooldowns and OAuth state are held in memory. For multi-instance deployments, move these controls to shared storage such as Redis.
+- Google OAuth state is bound to a short-lived HttpOnly browser cookie; OAuth credentials are returned in the login URL fragment and removed by the frontend callback handler.
