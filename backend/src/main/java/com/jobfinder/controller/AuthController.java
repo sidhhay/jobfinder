@@ -105,6 +105,7 @@ public class AuthController {
         return new SessionResponse(UserResponse.from(user), new AuthTokens("dev-token", "dev-token"));
     }
 
+    @RateLimit(perMinute = 10)
     @GetMapping("/google/start")
     public ResponseEntity<Void> googleStart() {
         URI target = google.startUrl();
@@ -122,6 +123,7 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.FOUND).location(target).header("Set-Cookie", cookie.toString()).build();
     }
 
+    @RateLimit(perMinute = 10)
     @GetMapping("/google/callback")
     public ResponseEntity<Void> googleCallback(
             @RequestParam(required = false) String code,
