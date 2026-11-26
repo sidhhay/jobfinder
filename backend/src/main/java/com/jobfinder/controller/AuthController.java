@@ -11,6 +11,7 @@ import com.jobfinder.dto.AuthDtos.SessionResponse;
 import com.jobfinder.dto.AuthDtos.UserResponse;
 import com.jobfinder.dto.AuthDtos.VerifyEmailRequest;
 import com.jobfinder.security.CurrentUser;
+import com.jobfinder.security.RateLimit;
 import com.jobfinder.service.AuthService;
 import com.jobfinder.service.GoogleOAuthService;
 import com.jobfinder.service.UserAccountService;
@@ -46,11 +47,13 @@ public class AuthController {
         this.settings = settings;
     }
 
+    @RateLimit(perMinute = 3)
     @PostMapping("/register")
     public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
         return auth.register(request);
     }
 
+    @RateLimit(perMinute = 5)
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return auth.login(request);
@@ -61,11 +64,13 @@ public class AuthController {
         return auth.refresh(request.refreshToken());
     }
 
+    @RateLimit(perMinute = 5)
     @PostMapping("/verify-email")
     public AuthResponse verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
         return auth.verifyEmail(request);
     }
 
+    @RateLimit(perMinute = 2)
     @PostMapping("/resend-verification")
     public AuthResponse resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
         return auth.resendVerification(request);
