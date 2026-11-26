@@ -28,7 +28,7 @@ public class DatabaseConfig {
         URI uri = URI.create(url.strip());
         // stringtype=unspecified lets PostgreSQL infer uuid, jsonb and date types from text parameters.
         // prepareThreshold=0 keeps the driver compatible with transaction poolers.
-        String query = "stringtype=unspecified&prepareThreshold=0"
+        String query = "stringtype=unspecified&prepareThreshold=0&currentSchema=" + schema
                 + (uri.getRawQuery() == null ? "" : "&" + uri.getRawQuery());
         int port = uri.getPort() == -1 ? 5432 : uri.getPort();
 
