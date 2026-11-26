@@ -83,7 +83,7 @@ public class DocumentService {
     /** Renders the edited HTML to PDF, uploads it and records a new version. */
     public byte[] compile(String userId, String applicationId, CompileDocumentRequest request) {
         Map<String, Object> document = requireDocument(userId, applicationId, request);
-        String safeHtml = pdf.sanitize(safeHtml);
+        String safeHtml = pdf.sanitize(request.html());
         byte[] bytes = pdf.render(safeHtml);
 
         String documentId = request.documentId();
