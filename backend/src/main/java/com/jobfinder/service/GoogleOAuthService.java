@@ -116,7 +116,8 @@ public class GoogleOAuthService {
             Map<String, Object> query = new LinkedHashMap<>();
             query.put("access_token", tokens.accessToken());
             query.put("refresh_token", tokens.refreshToken());
-            return URI.create(loginPage() + "?" + Http.query(query));
+            // Put credentials in the URL fragment: fragments are not sent in HTTP requests or referrer headers.
+            return URI.create(loginPage() + "#" + Http.query(query));
         } catch (ApiException problem) {
             return failure(problem.getMessage());
         }
